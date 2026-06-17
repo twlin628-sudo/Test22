@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LexSpeak — AI 英文口說測驗</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink:    #1a1a2e;
+    --ink2:   #44445a;
+    --ink3:   #8888a4;
+    --paper:  #f5f4f0;
+    --card:   #ffffff;
+    --accent: #4f46e5;
+    --accent-light: #ede9fe;
+    --ok:     #16a34a;
+    --ok-light:#dcfce7;
+    --warn:   #d97706;
+    --border: #e4e2ec;
+    --shadow: 0 2px 12px rgba(79,70,229,.10);
+    --radius: 14px;
+  }
+
+  body {
+    font-family: "Georgia", "Noto Serif TC", serif;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+    padding: 0 0 60px;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--ink);
+    color: #fff;
+    padding: 18px 24px 14px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  header h1 { font-size: 1.15rem; font-weight: 700; letter-spacing: .02em; }
+  header .ver {
+    font-family: "SF Mono","Fira Mono",monospace;
+    font-size: .68rem;
+    color: rgba(255,255,255,.4);
+    margin-right: auto;
+  }
+  header .model-badge {
+    font-family: "SF Mono","Fira Mono",monospace;
+    font-size: .72rem;
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 20px;
+    padding: 2px 10px;
+    color: rgba(255,255,255,.75);
+    cursor: pointer;
+    transition: background .15s;
+  }
+  header .model-badge:hover { background: rgba(255,255,255,.2); }
+
+  /* ── Main ── */
+  main { max-width: 640px; margin: 0 auto; padding: 24px 16px 0; }
+
+  /* ── Browser warning ── */
+  .browser-warn {
+    display: none;
+    background: #fff7ed; border: 1px solid #fed7aa; color: var(--warn);
+    border-radius: 10px; padding: 10px 14px; font-size: .82rem;
+    margin-bottom: 16px; line-height: 1.5;
+  }
+  .browser-warn.show { display: block; }
+
+  /* ── Level row ── */
+  .level-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .level-btn {
+    font-size: .78rem; padding: 5px 14px;
+    border: 1px solid var(--border); border-radius: 20px;
+    background: var(--card); color: var(--ink3); cursor: pointer;
+    font-family: "SF Mono","Fira Mono",monospace;
+    transition: all .15s;
+  }
+  .level-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* ── TTS speed row ── */
+  .speed-row {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 18px;
+    font-size: .8rem; color: var(--ink3);
+    font-family: "SF Mono","Fira Mono",monospace;
+  }
+  .speed-row label { white-space: nowrap; }
+  .speed-row input[type=range] { flex: 1; accent-color: var(--accent); height: 4px; cursor: pointer; }
+  .speed-val { min-width: 36px; text-align: right; color: var(--ink2); font-weight: 600; }
+
+  /* ── Words area ── */
+  .words-wrap {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 22px 20px;
+    min-height: 200px;
+    position: relative;
+    transition: opacity .25s;
+  }
+  .words-wrap.loading { opacity: .45; pointer-events: none; }
+
+  .word-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  @media (max-width: 480px) { .word-grid { grid-template-columns: 1fr; } }
+
+  .wcard {
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    background: var(--paper);
+    transition: border-color .2s, background .2s, opacity .2s;
+    position: relative;
+  }
+  .wcard.matched { border-color: var(--ok); background: var(--ok-light); }
+  .wcard.dimmed  { opacity: .45; }
+  .wcard .wtop { display: flex; align-items: center; gap: 8px; }
+  .wcard .num {
+    font-family: "SF Mono","Fira Mono",monospace; font-size: .7rem;
+    color: var(--ink3); background: var(--card);
+    border: 1px solid var(--border); border-radius: 50%;
+    width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .wcard .en  { font-size: 1.25rem; font-weight: 700; color: var(--ink); line-height: 1.2; }
+  .wcard .check { margin-left: auto; color: var(--ok); font-weight: 700; font-size: 1.1rem; display: none; }
+  .wcard.matched .check { display: inline; }
+  .wcard .phon { font-family: "SF Mono","Fira Mono",monospace; font-size: .76rem; color: var(--ink3); margin: 4px 0 2px; }
+  .wcard .zh  { font-size: .92rem; color: var(--ink2); }
+  .wcard .pos { font-size: .68rem; color: var(--accent); font-family: "SF Mono","Fira Mono",monospace; }
+
+  .tts-btn {
+    flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--card); color: var(--ink3);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    font-size: 13px; transition: background .15s, color .15s, transform .1s; line-height: 1;
+    margin-left: auto;
+  }
+  .tts-btn:hover { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
+  .tts-btn:active { transform: scale(.9); }
+  .tts-btn.speaking { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .wcard.matched .tts-btn { margin-left: 0; }
+
+  /* ── Placeholder ── */
+  .placeholder {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 12px; min-height: 170px;
+    color: var(--ink3); text-align: center;
+  }
+  .placeholder .big-icon { font-size: 3rem; }
+  .placeholder p { font-size: .95rem; line-height: 1.6; }
+
+  /* ── Spinner ── */
+  .spinner-wrap {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none; opacity: 0; transition: opacity .2s;
+  }
+  .words-wrap.loading .spinner-wrap { opacity: 1; }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .75s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Buttons ── */
+  .btn {
+    font-family: "Georgia", serif; font-size: .9rem; border: none;
+    border-radius: 10px; padding: 11px 20px; cursor: pointer;
+    transition: opacity .15s, transform .1s; line-height: 1;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .btn-primary { background: var(--accent); color: #fff; font-weight: 700; font-size: 1rem; }
+  .btn-primary:hover:not(:disabled) { opacity: .88; }
+
+  .gen-bar { display: flex; gap: 10px; margin-top: 16px; }
+  .gen-bar .btn-primary { flex: 1; }
+
+  /* ── Mic section ── */
+  .mic-section {
+    margin-top: 22px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 22px 20px;
+    text-align: center;
+  }
+  .mic-section.disabled { opacity: .5; pointer-events: none; }
+  .mic-hint { font-size: .85rem; color: var(--ink3); margin-bottom: 16px; line-height: 1.6; }
+
+  .mic-btn {
+    width: 84px; height: 84px; border-radius: 50%;
+    border: none; cursor: pointer;
+    background: var(--accent); color: #fff;
+    font-size: 34px; display: inline-flex; align-items: center; justify-content: center;
+    transition: transform .1s, background .15s, box-shadow .2s;
+  }
+  .mic-btn:hover:not(:disabled) { opacity: .9; }
+  .mic-btn:active:not(:disabled) { transform: scale(.94); }
+  .mic-btn:disabled { background: var(--ink3); cursor: default; }
+  .mic-btn.recording { background: #dc2626; animation: micpulse 1.1s ease-in-out infinite; }
+  @keyframes micpulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,.45); }
+    50%      { box-shadow: 0 0 0 14px rgba(220,38,38,0); }
+  }
+
+  .mic-status {
+    margin-top: 14px; font-size: .95rem; color: var(--ink2);
+    min-height: 1.4em; font-weight: 500;
+  }
+  .mic-status .step {
+    font-family: "SF Mono","Fira Mono",monospace; font-size: .72rem;
+    color: var(--accent); display: block; margin-bottom: 2px;
+  }
+
+  /* ── Result ── */
+  .result-box {
+    margin-top: 16px; padding: 14px 16px;
+    border-radius: 10px; font-size: .9rem; line-height: 1.7;
+    display: none; text-align: left;
+  }
+  .result-box.show { display: block; }
+  .result-box.ok   { background: var(--ok-light); border: 1px solid #bbf7d0; }
+  .result-box.miss { background: #fff7ed; border: 1px solid #fed7aa; }
+  .result-box .rtitle { font-weight: 700; font-size: 1.05rem; margin-bottom: 8px; }
+  .result-box.ok   .rtitle { color: var(--ok); }
+  .result-box.miss .rtitle { color: var(--warn); }
+  .result-box .heard {
+    font-family: "SF Mono","Fira Mono",monospace; font-size: .8rem;
+    color: var(--ink2); background: rgba(255,255,255,.6);
+    border-radius: 8px; padding: 8px 10px; margin-top: 8px;
+  }
+  .result-box .heard span { color: var(--ink3); }
+  .result-box .reason { color: var(--ink2); margin-top: 8px; font-size: .85rem; }
+
+  .retry-bar { margin-top: 14px; display: none; }
+  .retry-bar.show { display: block; }
+
+  /* ── Modal ── */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.35);
+    display: none; align-items: center; justify-content: center; z-index: 100;
+  }
+  .overlay.show { display: flex; }
+  .modal {
+    background: var(--card); border-radius: var(--radius);
+    padding: 24px 22px; width: 300px;
+    box-shadow: 0 8px 40px rgba(0,0,0,.2);
+  }
+  .modal h2 { font-size: 1rem; margin-bottom: 14px; }
+  .modal select {
+    width: 100%; padding: 9px 10px; border: 1px solid var(--border);
+    border-radius: 8px; font-size: .95rem; margin-bottom: 14px;
+    font-family: "SF Mono","Fira Mono",monospace; background: var(--paper);
+  }
+  .modal-actions { display: flex; gap: 8px; }
+  .modal-actions .btn { flex: 1; padding: 9px; font-size: .9rem; }
+  .btn-cancel { background: var(--paper); color: var(--ink2); border: 1px solid var(--border); }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: #1f1f2e; color: #fff;
+    padding: 12px 20px; border-radius: 10px;
+    font-size: .88rem; max-width: 360px; text-align: center;
+    transition: transform .3s, opacity .3s;
+    opacity: 0; pointer-events: none; z-index: 200;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎙 LexSpeak</h1>
+  <span class="ver">v1.0.0</span>
+  <span class="model-badge" id="model-badge" onclick="openModal()">gemma4:e4b ▾</span>
+</header>
+
+<main>
+
+  <div class="browser-warn" id="browser-warn">
+    ⚠ 你的瀏覽器可能不支援語音辨識（STT）。建議使用 <b>Chrome</b> 或 <b>Edge</b>，並在 <b>https</b> 或 localhost 環境開啟。
+  </div>
+
+  <!-- 等級 -->
+  <div class="level-row">
+    <button class="level-btn" onclick="setLevel('國小',this)">國小</button>
+    <button class="level-btn" onclick="setLevel('國中',this)">國中</button>
+    <button class="level-btn active" onclick="setLevel('高中',this)">高中</button>
+    <button class="level-btn" onclick="setLevel('大學',this)">大學</button>
+    <button class="level-btn" onclick="setLevel('GRE',this)">GRE</button>
+    <button class="level-btn" onclick="setLevel('口語',this)">口語</button>
+  </div>
+
+  <!-- 語速 -->
+  <div class="speed-row">
+    <label>🔊 試聽語速</label>
+    <input type="range" id="speed-slider" min="0.5" max="1.5" step="0.05" value="0.85"
+           oninput="updateSpeed(this.value)">
+    <span class="speed-val" id="speed-val">0.85×</span>
+  </div>
+
+  <!-- 6 單字區 -->
+  <div class="words-wrap" id="words-wrap">
+    <div class="spinner-wrap"><div class="spinner"></div></div>
+    <div id="words-content">
+      <div class="placeholder">
+        <div class="big-icon">✦</div>
+        <p>選擇等級後按下方按鈕<br>讓 AI 產生 6 個英文單字</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="gen-bar">
+    <button class="btn btn-primary" id="gen-btn" onclick="genWords()">產生 6 個單字 →</button>
+  </div>
+
+  <!-- 麥克風作答區 -->
+  <div class="mic-section disabled" id="mic-section">
+    <div class="mic-hint">
+      從上方 6 個單字選一個，按下麥克風後<br>
+      <b>先念英文單字</b>，再依提示<b>念中文翻譯</b>，由 AI 判定你念的是哪一個。
+    </div>
+    <button class="mic-btn" id="mic-btn" onclick="startQuiz()" disabled>🎤</button>
+    <div class="mic-status" id="mic-status">先產生單字才能作答</div>
+
+    <div class="result-box" id="result-box"></div>
+    <div class="retry-bar" id="retry-bar">
+      <button class="btn btn-primary" style="width:100%" onclick="resetQuiz()">再作答一次 🎤</button>
+    </div>
+  </div>
+
+</main>
+
+<!-- Model modal -->
+<div class="overlay" id="overlay" onclick="closeModalOutside(event)">
+  <div class="modal">
+    <h2>選擇模型</h2>
+    <select id="model-select">
+      <option value="gemma4:e4b">gemma4:e4b（快速）</option>
+      <option value="qwen3.5:9b">qwen3.5:9b</option>
+      <option value="gemma4:26b">gemma4:26b（精確）</option>
+      <option value="qwen3.6:27b">qwen3.6:27b</option>
+    </select>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="applyModel()">確定</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const BASE = "https://spring-art-db47.twlin628.workers.dev";
+let model   = localStorage.getItem("vocab_model") || "gemma4:e4b";
+let level   = "高中";
+let ttsRate = 0.85;
+let words   = [];          // 目前的 6 個單字
+let genBusy = false;
+let quizBusy = false;
+
+document.getElementById("model-badge").textContent = model + " ▾";
+document.getElementById("model-select").value = model;
+
+// ── 語速 ──
+function updateSpeed(val) {
+  ttsRate = parseFloat(val);
+  document.getElementById("speed-val").textContent = ttsRate.toFixed(2) + "×";
+}
+
+// ── TTS（試聽單字） ──
+const synth = window.speechSynthesis;
+let activeTtsBtn = null;
+if (synth) synth.getVoices();
+function clearTtsBtn() {
+  if (activeTtsBtn) { activeTtsBtn.classList.remove("speaking"); activeTtsBtn.textContent = "🔊"; activeTtsBtn = null; }
+}
+function speak(text, btn) {
+  if (!synth) { showToast("⚠ 此瀏覽器不支援語音合成"); return; }
+  if (synth.speaking) { const prev = activeTtsBtn; synth.cancel(); clearTtsBtn(); if (prev === btn) return; }
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.lang = "en-US"; utt.rate = ttsRate;
+  const voices = synth.getVoices();
+  const enVoice = voices.find(v => v.lang.startsWith("en") && v.localService) || voices.find(v => v.lang.startsWith("en"));
+  if (enVoice) utt.voice = enVoice;
+  utt.onstart = () => { activeTtsBtn = btn; btn.classList.add("speaking"); btn.textContent = "■"; };
+  utt.onend = utt.onerror = () => { btn.classList.remove("speaking"); btn.textContent = "🔊"; activeTtsBtn = null; };
+  synth.speak(utt);
+}
+
+// ── 等級設定 ──
+const LEVEL_CONFIG = {
+  "國小": "約500字（教育部基本1200字前段），如 library, weather, careful, harvest, polite",
+  "國中": "約1200字（教育部基本1200字），如 encourage, consider, qualify, symptom, negotiate",
+  "高中": "約7000字（大考中心高中英文參考詞彙表），如 ambiguous, inevitable, perceive, meticulous, lucid",
+  "大學": "CEFR B2-C1 / 學術詞彙AWL，如 paradigm, articulate, inherent, juxtapose, exacerbate",
+  "GRE":  "C1-C2 低頻難詞，如 ambivalent, loquacious, recalcitrant, tendentious, abstruse",
+  "口語": "常用口語表達/片語動詞，如 hang out, figure out, on the fence, bite the bullet",
+};
+
+function setLevel(l, btn) {
+  level = l;
+  document.querySelectorAll(".level-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+}
+
+// ── 產生 6 個單字 ──
+async function genWords() {
+  if (genBusy) return;
+  genBusy = true;
+  clearTtsBtn(); if (synth && synth.speaking) synth.cancel();
+
+  const wrap   = document.getElementById("words-wrap");
+  const genBtn = document.getElementById("gen-btn");
+  wrap.classList.add("loading");
+  genBtn.disabled = true;
+  lockMic("AI 出題中…");
+
+  const seed = Math.floor(Math.random() * 99991) + 10;
+  const prompt =
+`你是英文單字老師。請依等級產生「6 個不同」的英文單字，難度需符合該等級，並涵蓋不同難度（避免全是最高頻字）。
+
+【等級】${level}
+【詞彙庫參考】${LEVEL_CONFIG[level]}
+【隨機種子】${seed}（用此數字增加選字隨機性，每次結果應不同，6 個字彼此不可重複）
+
+請嚴格只輸出以下 JSON 陣列，不可有任何其他文字或說明：
+[
+  { "word": "英文單字", "phonetic": "KK音標", "pos": "詞性", "zh_meaning": "中文意思(2-6字)" }
+]
+陣列必須剛好 6 個元素。`;
+
+  try {
+    const raw = await callAI(prompt);
+    const arr = parseArray(raw);
+    if (!Array.isArray(arr) || arr.length === 0) throw new Error("AI 回應格式錯誤，請再試一次。");
+    words = arr.slice(0, 6).filter(w => w && w.word);
+    if (words.length < 2) throw new Error("AI 產生的單字不足，請再試一次。");
+    renderWords();
+    unlockMic();
+  } catch (e) {
+    showToast("⚠ " + e.message);
+    renderPlaceholder("↺", "出了點問題，請再按一次");
+    words = [];
+    lockMic("先產生單字才能作答");
+  } finally {
+    wrap.classList.remove("loading");
+    genBtn.disabled = false;
+    genBusy = false;
+  }
+}
+
+function renderWords() {
+  const html = words.map((w, i) => `
+    <div class="wcard" id="wcard-${i}">
+      <div class="wtop">
+        <span class="num">${i + 1}</span>
+        <span class="en">${w.word}</span>
+        <span class="check">✓</span>
+        <button class="tts-btn" title="試聽" onclick="speak('${(w.word||'').replace(/'/g,"\\'")}', this)">🔊</button>
+      </div>
+      <div class="phon">${w.phonetic || ""} <span class="pos">${w.pos || ""}</span></div>
+      <div class="zh">${w.zh_meaning || ""}</div>
+    </div>`).join("");
+  document.getElementById("words-content").innerHTML = `<div class="word-grid">${html}</div>`;
+}
+
+function renderPlaceholder(icon, msg) {
+  document.getElementById("words-content").innerHTML =
+    `<div class="placeholder"><div class="big-icon">${icon}</div><p>${msg}</p></div>`;
+}
+
+// ── 麥克風鎖定狀態 ──
+function lockMic(msg) {
+  document.getElementById("mic-section").classList.add("disabled");
+  document.getElementById("mic-btn").disabled = true;
+  document.getElementById("mic-status").textContent = msg || "";
+}
+function unlockMic() {
+  document.getElementById("mic-section").classList.remove("disabled");
+  document.getElementById("mic-btn").disabled = false;
+  document.getElementById("mic-status").textContent = "選一個單字，按麥克風開始作答";
+  hideResult();
+}
+
+// ── STT：辨識一段語音（回傳 Promise<string>） ──
+function recognizeOnce(lang) {
+  return new Promise((resolve, reject) => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { reject(new Error("此瀏覽器不支援語音辨識，請改用 Chrome/Edge")); return; }
+    const rec = new SR();
+    rec.lang = lang;
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.continuous = false;
+    let got = "", fatal = null;
+    rec.onresult = (e) => { got = e.results[0][0].transcript || ""; };
+    rec.onerror  = (e) => {
+      if (e.error === "no-speech" || e.error === "aborted") return; // 交給 onend 以空字串收尾
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") fatal = "麥克風權限被拒絕，請允許後再試";
+      else if (e.error === "audio-capture") fatal = "找不到麥克風裝置";
+      else fatal = "辨識錯誤：" + e.error;
+    };
+    rec.onend = () => { fatal ? reject(new Error(fatal)) : resolve(got.trim()); };
+    try { rec.start(); } catch (err) { reject(new Error("無法啟動麥克風：" + err.message)); }
+  });
+}
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// ── 作答流程：先英文 → 再中文 → 送 AI 判定 ──
+async function startQuiz() {
+  if (quizBusy || words.length === 0) return;
+  quizBusy = true;
+  clearTtsBtn(); if (synth && synth.speaking) synth.cancel();
+  hideResult();
+  clearMatch();
+
+  const micBtn = document.getElementById("mic-btn");
+  micBtn.disabled = true;
+
+  let enText = "", zhText = "";
+  try {
+    // 第 1 段：英文
+    micBtn.classList.add("recording");
+    setStatus("第 1 / 2 段", "🎤 請念出「英文單字」…");
+    enText = await recognizeOnce("en-US");
+    micBtn.classList.remove("recording");
+
+    // 過場
+    setStatus("準備中", "✅ 已收到英文，準備念中文…");
+    await sleep(800);
+
+    // 第 2 段：中文
+    micBtn.classList.add("recording");
+    setStatus("第 2 / 2 段", "🎤 請念出「中文翻譯」…");
+    zhText = await recognizeOnce("zh-TW");
+    micBtn.classList.remove("recording");
+
+    if (!enText && !zhText) throw new Error("沒有偵測到語音，請再試一次");
+
+    // 送 AI 判定
+    setStatus("判定中", "🤖 AI 判定中…");
+    const r = await judge(enText, zhText);
+    renderResult(r, enText, zhText);
+  } catch (e) {
+    micBtn.classList.remove("recording");
+    showToast("⚠ " + e.message);
+    setStatus("", "可重新作答");
+  } finally {
+    micBtn.disabled = false;
+    quizBusy = false;
+    document.getElementById("retry-bar").classList.add("show");
+  }
+}
+
+function setStatus(step, msg) {
+  document.getElementById("mic-status").innerHTML =
+    (step ? `<span class="step">${step}</span>` : "") + msg;
+}
+
+// ── AI 判定 ──
+async function judge(enText, zhText) {
+  const list = words.map((w, i) => `${i + 1}. ${w.word}（${w.zh_meaning || ""}）`).join("\n");
+  const prompt =
+`使用者正在做英文單字口說測驗。以下是 6 個候選單字：
+${list}
+
+使用者透過語音辨識念出來的內容（辨識可能有誤差/音譯，請寬鬆比對發音與語意）：
+- 英文部分辨識結果：「${enText || "(無)"}」
+- 中文部分辨識結果：「${zhText || "(無)"}」
+
+請判斷使用者最可能想念的是上面哪一個候選單字。若發音與語意都明顯對不上任何一個，matched 回傳 null。
+
+請嚴格只輸出以下 JSON，不可有其他文字：
+{
+  "matched": "命中的英文單字，或 null",
+  "index": 命中的編號(1-6)，無則 0,
+  "reason": "簡短判定理由（繁體中文，一句）"
+}`;
+  const raw = await callAI(prompt);
+  return parseObject(raw);
+}
+
+function renderResult(r, enText, zhText) {
+  clearMatch();
+  const box = document.getElementById("result-box");
+  const heard = `<div class="heard"><span>聽到的英文：</span>${enText || "(無)"}<br><span>聽到的中文：</span>${zhText || "(無)"}</div>`;
+
+  let matchedIdx = -1;
+  if (r && r.matched && String(r.matched).toLowerCase() !== "null") {
+    matchedIdx = words.findIndex(w => w.word.toLowerCase() === String(r.matched).toLowerCase());
+    if (matchedIdx < 0 && r.index >= 1 && r.index <= words.length) matchedIdx = r.index - 1;
+  }
+
+  if (matchedIdx >= 0) {
+    const w = words[matchedIdx];
+    words.forEach((_, i) => {
+      const c = document.getElementById("wcard-" + i);
+      if (i === matchedIdx) c.classList.add("matched"); else c.classList.add("dimmed");
+    });
+    box.className = "result-box ok show";
+    box.innerHTML = `<div class="rtitle">✓ 判定為：${w.word}　${w.zh_meaning || ""}</div>
+      ${r.reason ? `<div class="reason">${r.reason}</div>` : ""}${heard}`;
+    setStatus("", "判定完成");
+  } else {
+    box.className = "result-box miss show";
+    box.innerHTML = `<div class="rtitle">✗ 不在這 6 個單字中</div>
+      ${r && r.reason ? `<div class="reason">${r.reason}</div>` : ""}${heard}`;
+    setStatus("", "判定完成");
+  }
+}
+
+function clearMatch() {
+  words.forEach((_, i) => {
+    const c = document.getElementById("wcard-" + i);
+    if (c) c.classList.remove("matched", "dimmed");
+  });
+}
+function hideResult() { document.getElementById("result-box").classList.remove("show"); document.getElementById("retry-bar").classList.remove("show"); }
+
+function resetQuiz() {
+  hideResult();
+  clearMatch();
+  setStatus("", "選一個單字，按麥克風開始作答");
+}
+
+// ── 共用 AI 呼叫 ──
+async function callAI(prompt) {
+  const res = await fetch(BASE + "/api/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], stream: false }),
+  });
+  if (!res.ok) { const t = await res.text(); throw new Error(`HTTP ${res.status}: ${t.slice(0,120)}`); }
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content ?? "";
+}
+function parseObject(raw) {
+  const m = raw.match(/\{[\s\S]*\}/);
+  if (!m) throw new Error("AI 回應格式錯誤，請再試一次。");
+  return JSON.parse(m[0]);
+}
+function parseArray(raw) {
+  const m = raw.match(/\[[\s\S]*\]/);
+  if (!m) throw new Error("AI 回應格式錯誤，請再試一次。");
+  return JSON.parse(m[0]);
+}
+
+// ── Model modal ──
+function openModal()  { document.getElementById("model-select").value = model; document.getElementById("overlay").classList.add("show"); }
+function closeModal() { document.getElementById("overlay").classList.remove("show"); }
+function closeModalOutside(e) { if (e.target === document.getElementById("overlay")) closeModal(); }
+function applyModel() {
+  model = document.getElementById("model-select").value;
+  localStorage.setItem("vocab_model", model);
+  document.getElementById("model-badge").textContent = model + " ▾";
+  closeModal();
+}
+
+// ── Toast ──
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 3500);
+}
+
+// ── 啟動：偵測瀏覽器支援 ──
+(function init() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) document.getElementById("browser-warn").classList.add("show");
+})();
+</script>
+</body>
+</html>
