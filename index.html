@@ -307,14 +307,6 @@
     <button class="level-btn" onclick="setLevel('口語',this)">口語</button>
   </div>
 
-  <!-- 語速 -->
-  <div class="speed-row">
-    <label>🔊 試聽語速</label>
-    <input type="range" id="speed-slider" min="0.5" max="1.5" step="0.05" value="0.85"
-           oninput="updateSpeed(this.value)">
-    <span class="speed-val" id="speed-val">0.85×</span>
-  </div>
-
   <!-- 6 單字區 -->
   <div class="words-wrap" id="words-wrap">
     <div class="spinner-wrap"><div class="spinner"></div></div>
@@ -370,39 +362,12 @@
 const BASE = "https://spring-art-db47.twlin628.workers.dev";
 let model   = localStorage.getItem("vocab_model") || "gemma4:e4b";
 let level   = "高中";
-let ttsRate = 0.85;
 let words   = [];          // 目前的 6 個單字
 let genBusy = false;
 let quizBusy = false;
 
 document.getElementById("model-badge").textContent = model + " ▾";
 document.getElementById("model-select").value = model;
-
-// ── 語速 ──
-function updateSpeed(val) {
-  ttsRate = parseFloat(val);
-  document.getElementById("speed-val").textContent = ttsRate.toFixed(2) + "×";
-}
-
-// ── TTS（試聽單字） ──
-const synth = window.speechSynthesis;
-let activeTtsBtn = null;
-if (synth) synth.getVoices();
-function clearTtsBtn() {
-  if (activeTtsBtn) { activeTtsBtn.classList.remove("speaking"); activeTtsBtn.textContent = "🔊"; activeTtsBtn = null; }
-}
-function speak(text, btn) {
-  if (!synth) { showToast("⚠ 此瀏覽器不支援語音合成"); return; }
-  if (synth.speaking) { const prev = activeTtsBtn; synth.cancel(); clearTtsBtn(); if (prev === btn) return; }
-  const utt = new SpeechSynthesisUtterance(text);
-  utt.lang = "en-US"; utt.rate = ttsRate;
-  const voices = synth.getVoices();
-  const enVoice = voices.find(v => v.lang.startsWith("en") && v.localService) || voices.find(v => v.lang.startsWith("en"));
-  if (enVoice) utt.voice = enVoice;
-  utt.onstart = () => { activeTtsBtn = btn; btn.classList.add("speaking"); btn.textContent = "■"; };
-  utt.onend = utt.onerror = () => { btn.classList.remove("speaking"); btn.textContent = "🔊"; activeTtsBtn = null; };
-  synth.speak(utt);
-}
 
 // ── 等級設定 ──
 const LEVEL_CONFIG = {
@@ -424,7 +389,6 @@ function setLevel(l, btn) {
 async function genWords() {
   if (genBusy) return;
   genBusy = true;
-  clearTtsBtn(); if (synth && synth.speaking) synth.cancel();
 
   const wrap   = document.getElementById("words-wrap");
   const genBtn = document.getElementById("gen-btn");
@@ -473,10 +437,8 @@ function renderWords() {
         <span class="num">${i + 1}</span>
         <span class="en">${w.word}</span>
         <span class="check">✓</span>
-        <button class="tts-btn" title="試聽" onclick="speak('${(w.word||'').replace(/'/g,"\\'")}', this)">🔊</button>
       </div>
       <div class="phon">${w.phonetic || ""} <span class="pos">${w.pos || ""}</span></div>
-      <div class="zh">${w.zh_meaning || ""}</div>
     </div>`).join("");
   document.getElementById("words-content").innerHTML = `<div class="word-grid">${html}</div>`;
 }
@@ -528,7 +490,6 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 async function startQuiz() {
   if (quizBusy || words.length === 0) return;
   quizBusy = true;
-  clearTtsBtn(); if (synth && synth.speaking) synth.cancel();
   hideResult();
   clearMatch();
 
