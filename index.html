@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LexSpeak — AI 英文口說測驗</title>
+<title>LexSuite — AI 英文學習</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -60,6 +60,24 @@
   }
   header .model-badge:hover { background: rgba(255,255,255,.2); }
 
+  /* ── Tab bar ── */
+  .tab-bar {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--card);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .tab-btn {
+    flex: 1; padding: 13px 4px; border: none; background: transparent;
+    font-family: "Georgia", serif; font-size: .82rem; color: var(--ink3);
+    cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+    transition: color .15s, border-color .15s; white-space: nowrap;
+  }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab-btn:hover:not(.active) { color: var(--ink2); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
   /* ── Main ── */
   main { max-width: 640px; margin: 0 auto; padding: 24px 16px 0; }
 
@@ -73,7 +91,7 @@
   .browser-warn.show { display: block; }
 
   /* ── Level row ── */
-  .level-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .level-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
   .level-btn {
     font-size: .78rem; padding: 5px 14px;
     border: 1px solid var(--border); border-radius: 20px;
@@ -94,7 +112,130 @@
   .speed-row input[type=range] { flex: 1; accent-color: var(--accent); height: 4px; cursor: pointer; }
   .speed-val { min-width: 36px; text-align: right; color: var(--ink2); font-weight: 600; }
 
-  /* ── Words area ── */
+  /* ── Word card (隨機/查詢) ── */
+  .word-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 32px 28px 24px;
+    min-height: 340px;
+    position: relative;
+    transition: opacity .25s;
+  }
+  .word-card.loading { opacity: .45; pointer-events: none; }
+  .word-card .tag {
+    font-family: "SF Mono","Fira Mono",monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--accent); background: var(--accent-light);
+    border-radius: 20px; padding: 3px 10px;
+    display: inline-block; margin-bottom: 14px;
+  }
+  .word-row { display: flex; align-items: center; gap: 12px; margin-bottom: 2px; }
+  .word-card .en-word {
+    font-size: 2.6rem; font-weight: 700;
+    letter-spacing: -.01em; line-height: 1.1; color: var(--ink);
+  }
+  .word-card .phonetic {
+    font-family: "SF Mono","Fira Mono",monospace;
+    font-size: .9rem; color: var(--ink3); margin: 6px 0 4px;
+  }
+  .word-card .divider { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+  .word-card .zh-meaning { font-size: 1.25rem; color: var(--ink); margin-bottom: 18px; font-weight: 500; }
+  .section-label {
+    font-family: "SF Mono","Fira Mono",monospace;
+    font-size: .68rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink3); margin-bottom: 6px;
+  }
+  .sentence-block { margin-bottom: 8px; }
+  .sentence-row { display: flex; align-items: flex-start; gap: 10px; }
+  .word-card .sentence-en { font-size: 1rem; line-height: 1.65; color: var(--ink2); flex: 1; }
+  .word-card .sentence-zh { font-size: .9rem; color: var(--ink3); line-height: 1.6; margin-top: 6px; }
+  .word-card .kw { color: var(--accent); font-weight: 600; }
+
+  /* ── TTS button (隨機/查詢卡片) ── */
+  .tts-btn {
+    flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--paper); color: var(--ink3);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    font-size: 16px; transition: background .15s, color .15s, transform .1s; line-height: 1;
+  }
+  .tts-btn:hover { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
+  .tts-btn:active { transform: scale(.92); }
+  .tts-btn.speaking {
+    background: var(--accent); color: #fff; border-color: var(--accent);
+    animation: pulse 1s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(79,70,229,.4); }
+    50%      { box-shadow: 0 0 0 6px rgba(79,70,229,0); }
+  }
+
+  /* ── Placeholder ── */
+  .placeholder {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 12px; min-height: 200px;
+    color: var(--ink3); text-align: center;
+  }
+  .placeholder .big-icon { font-size: 3rem; }
+  .placeholder p { font-size: .95rem; line-height: 1.6; }
+
+  /* ── Spinner ── */
+  .spinner-wrap {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none; opacity: 0; transition: opacity .2s;
+  }
+  .word-card.loading .spinner-wrap,
+  .words-wrap.loading .spinner-wrap { opacity: 1; }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .75s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Buttons ── */
+  .btn {
+    font-family: "Georgia", serif; font-size: .9rem; border: none;
+    border-radius: 10px; padding: 11px 20px; cursor: pointer;
+    transition: opacity .15s, transform .1s; line-height: 1;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .btn-primary { background: var(--accent); color: #fff; font-weight: 700; font-size: 1rem; }
+  .btn-primary:hover:not(:disabled) { opacity: .88; }
+
+  .action-bar { display: flex; gap: 10px; margin-top: 20px; }
+  .action-bar .btn-primary { flex: 1; }
+  .gen-bar { display: flex; gap: 10px; margin-top: 16px; }
+  .gen-bar .btn-primary { flex: 1; }
+
+  /* ── Lookup (查詢頁) ── */
+  .lookup-form { display: flex; gap: 10px; margin-bottom: 20px; }
+  .lookup-input {
+    flex: 1; padding: 12px 16px; border: 1px solid var(--border);
+    border-radius: 10px; font-size: 1rem; font-family: "Georgia", serif;
+    background: var(--card); color: var(--ink); outline: none; transition: border-color .15s;
+  }
+  .lookup-input:focus { border-color: var(--accent); }
+  .lookup-input::placeholder { color: var(--ink3); }
+  .btn-lookup {
+    background: var(--accent); color: #fff; font-weight: 700; font-size: .95rem;
+    padding: 12px 20px; border-radius: 10px; border: none; cursor: pointer;
+    white-space: nowrap; transition: opacity .15s, transform .1s;
+  }
+  .btn-lookup:hover:not(:disabled) { opacity: .88; }
+  .btn-lookup:disabled { opacity: .4; cursor: default; }
+  .btn-lookup:active { transform: scale(.97); }
+  .lang-hint {
+    font-size: .78rem; color: var(--ink3);
+    font-family: "SF Mono","Fira Mono",monospace;
+    margin-bottom: 14px; min-height: 1.2em;
+  }
+  .lang-hint .detected { color: var(--accent); font-weight: 600; }
+
+  /* ── Words area (口說頁) ── */
   .words-wrap {
     background: var(--card);
     border: 1px solid var(--border);
@@ -107,11 +248,7 @@
   }
   .words-wrap.loading { opacity: .45; pointer-events: none; }
 
-  .word-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }
+  .word-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   @media (max-width: 480px) { .word-grid { grid-template-columns: 1fr; } }
 
   .wcard {
@@ -136,59 +273,9 @@
   .wcard .check { margin-left: auto; color: var(--ok); font-weight: 700; font-size: 1.1rem; display: none; }
   .wcard.matched .check { display: inline; }
   .wcard .phon { font-family: "SF Mono","Fira Mono",monospace; font-size: .76rem; color: var(--ink3); margin: 4px 0 2px; }
-  .wcard .zh  { font-size: .92rem; color: var(--ink2); }
   .wcard .pos { font-size: .68rem; color: var(--accent); font-family: "SF Mono","Fira Mono",monospace; }
 
-  .tts-btn {
-    flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
-    border: 1px solid var(--border); background: var(--card); color: var(--ink3);
-    cursor: pointer; display: flex; align-items: center; justify-content: center;
-    font-size: 13px; transition: background .15s, color .15s, transform .1s; line-height: 1;
-    margin-left: auto;
-  }
-  .tts-btn:hover { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
-  .tts-btn:active { transform: scale(.9); }
-  .tts-btn.speaking { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .wcard.matched .tts-btn { margin-left: 0; }
-
-  /* ── Placeholder ── */
-  .placeholder {
-    display: flex; flex-direction: column; align-items: center;
-    justify-content: center; gap: 12px; min-height: 170px;
-    color: var(--ink3); text-align: center;
-  }
-  .placeholder .big-icon { font-size: 3rem; }
-  .placeholder p { font-size: .95rem; line-height: 1.6; }
-
-  /* ── Spinner ── */
-  .spinner-wrap {
-    position: absolute; inset: 0;
-    display: flex; align-items: center; justify-content: center;
-    pointer-events: none; opacity: 0; transition: opacity .2s;
-  }
-  .words-wrap.loading .spinner-wrap { opacity: 1; }
-  .spinner {
-    width: 36px; height: 36px;
-    border: 3px solid var(--border); border-top-color: var(--accent);
-    border-radius: 50%; animation: spin .75s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* ── Buttons ── */
-  .btn {
-    font-family: "Georgia", serif; font-size: .9rem; border: none;
-    border-radius: 10px; padding: 11px 20px; cursor: pointer;
-    transition: opacity .15s, transform .1s; line-height: 1;
-  }
-  .btn:active { transform: scale(.97); }
-  .btn:disabled { opacity: .4; cursor: default; }
-  .btn-primary { background: var(--accent); color: #fff; font-weight: 700; font-size: 1rem; }
-  .btn-primary:hover:not(:disabled) { opacity: .88; }
-
-  .gen-bar { display: flex; gap: 10px; margin-top: 16px; }
-  .gen-bar .btn-primary { flex: 1; }
-
-  /* ── Mic section ── */
+  /* ── Mic section (口說頁) ── */
   .mic-section {
     margin-top: 22px;
     background: var(--card);
@@ -245,9 +332,7 @@
   }
   .result-box .heard span { color: var(--ink3); }
   .result-box .reason { color: var(--ink2); margin-top: 8px; font-size: .85rem; }
-  .result-box .detail {
-    display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;
-  }
+  .result-box .detail { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
   .result-box .chip {
     font-family: "SF Mono","Fira Mono",monospace; font-size: .76rem;
     border-radius: 8px; padding: 4px 10px; border: 1px solid transparent;
@@ -258,24 +343,6 @@
 
   .retry-bar { margin-top: 14px; display: none; }
   .retry-bar.show { display: block; }
-
-  /* ── Tab bar ── */
-  .tab-bar {
-    display: flex;
-    border-bottom: 1px solid var(--border);
-    background: var(--card);
-    position: sticky; top: 0; z-index: 10;
-  }
-  .tab-btn {
-    flex: 1; padding: 13px 0; border: none; background: transparent;
-    font-family: "Georgia", serif; font-size: .9rem; color: var(--ink3);
-    cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
-    transition: color .15s, border-color .15s;
-  }
-  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
-  .tab-btn:hover:not(.active) { color: var(--ink2); }
-  .tab-panel { display: none; }
-  .tab-panel.active { display: block; }
 
   /* ── Play grid (聽力頁) ── */
   .play-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
@@ -359,37 +426,88 @@
 <body>
 
 <header>
-  <h1>🎙 LexSpeak</h1>
-  <span class="ver">v1.0.0</span>
+  <h1>✦ LexSuite</h1>
+  <span class="ver">v2.0.0</span>
   <span class="model-badge" id="model-badge" onclick="openModal()">gemma4:e4b ▾</span>
 </header>
 
 <!-- Tab bar -->
 <div class="tab-bar">
-  <button class="tab-btn active" onclick="switchTab('speak', this)">🎙 口說作答</button>
+  <button class="tab-btn active" onclick="switchTab('random', this)">🎲 隨機出題</button>
+  <button class="tab-btn" onclick="switchTab('lookup', this)">🔍 單字查詢</button>
+  <button class="tab-btn" onclick="switchTab('speak', this)">🎙 口說作答</button>
   <button class="tab-btn" onclick="switchTab('listen', this)">🎧 聽力輸入</button>
 </div>
 
 <main>
 
-  <!-- ══ PANEL A：口說作答 ══ -->
-  <div class="tab-panel active" id="panel-speak">
+  <!-- ══ TAB A：隨機出題 ══ -->
+  <div class="tab-panel active" id="panel-random">
+    <div class="level-row">
+      <button class="level-btn" onclick="setLevelRand('國小',this)">國小</button>
+      <button class="level-btn" onclick="setLevelRand('國中',this)">國中</button>
+      <button class="level-btn active" onclick="setLevelRand('高中',this)">高中</button>
+      <button class="level-btn" onclick="setLevelRand('大學',this)">大學</button>
+      <button class="level-btn" onclick="setLevelRand('GRE',this)">GRE</button>
+      <button class="level-btn" onclick="setLevelRand('口語',this)">口語</button>
+    </div>
+    <div class="speed-row">
+      <label>🔊 語速</label>
+      <input type="range" id="speed-slider" min="0.5" max="1.5" step="0.05" value="0.85"
+             oninput="updateSpeed(this.value)">
+      <span class="speed-val" id="speed-val">0.85×</span>
+    </div>
+    <div class="word-card" id="rand-card">
+      <div class="spinner-wrap"><div class="spinner"></div></div>
+      <div id="rand-content">
+        <div class="placeholder">
+          <div class="big-icon">✦</div>
+          <p>按下「下一個單字」<br>讓 AI 隨機出題</p>
+        </div>
+      </div>
+    </div>
+    <div class="action-bar">
+      <button class="btn btn-primary" id="next-btn" onclick="fetchWord()">下一個單字 →</button>
+    </div>
+  </div>
+
+  <!-- ══ TAB B：單字查詢 ══ -->
+  <div class="tab-panel" id="panel-lookup">
+    <div class="lang-hint" id="lang-hint">輸入中文或英文單字進行查詢</div>
+    <div class="lookup-form">
+      <input class="lookup-input" id="lookup-input" type="text"
+             placeholder="e.g.  ambiguous  或  模糊的"
+             oninput="detectLang(this.value)"
+             onkeydown="if(event.key==='Enter') doLookup()">
+      <button class="btn-lookup" id="lookup-btn" onclick="doLookup()">查詢</button>
+    </div>
+    <div class="word-card" id="lookup-card">
+      <div class="spinner-wrap"><div class="spinner"></div></div>
+      <div id="lookup-content">
+        <div class="placeholder">
+          <div class="big-icon">🔍</div>
+          <p>輸入想查的單字<br>支援中文 → 英文、英文 → 中文</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TAB C：口說作答 ══ -->
+  <div class="tab-panel" id="panel-speak">
 
     <div class="browser-warn" id="browser-warn">
       ⚠ 你的瀏覽器可能不支援語音辨識（STT）。建議使用 <b>Chrome</b> 或 <b>Edge</b>，並在 <b>https</b> 或 localhost 環境開啟。
     </div>
 
-    <!-- 等級 -->
     <div class="level-row">
-      <button class="level-btn" onclick="setLevel('國小',this)">國小</button>
-      <button class="level-btn" onclick="setLevel('國中',this)">國中</button>
-      <button class="level-btn active" onclick="setLevel('高中',this)">高中</button>
-      <button class="level-btn" onclick="setLevel('大學',this)">大學</button>
-      <button class="level-btn" onclick="setLevel('GRE',this)">GRE</button>
-      <button class="level-btn" onclick="setLevel('口語',this)">口語</button>
+      <button class="level-btn" onclick="setLevelSpeak('國小',this)">國小</button>
+      <button class="level-btn" onclick="setLevelSpeak('國中',this)">國中</button>
+      <button class="level-btn active" onclick="setLevelSpeak('高中',this)">高中</button>
+      <button class="level-btn" onclick="setLevelSpeak('大學',this)">大學</button>
+      <button class="level-btn" onclick="setLevelSpeak('GRE',this)">GRE</button>
+      <button class="level-btn" onclick="setLevelSpeak('口語',this)">口語</button>
     </div>
 
-    <!-- 6 單字區 -->
     <div class="words-wrap" id="words-wrap">
       <div class="spinner-wrap"><div class="spinner"></div></div>
       <div id="words-content">
@@ -404,7 +522,6 @@
       <button class="btn btn-primary" id="gen-btn" onclick="genWords()">產生 6 個單字 →</button>
     </div>
 
-    <!-- 麥克風作答區 -->
     <div class="mic-section disabled" id="mic-section">
       <div class="mic-hint">
         從上方 6 個單字選一個，按下麥克風後<br>
@@ -421,20 +538,18 @@
 
   </div>
 
-  <!-- ══ PANEL B：聽力輸入 ══ -->
+  <!-- ══ TAB D：聽力輸入 ══ -->
   <div class="tab-panel" id="panel-listen">
 
-    <!-- 等級 -->
     <div class="level-row">
-      <button class="level-btn" onclick="setLevel2('國小',this)">國小</button>
-      <button class="level-btn" onclick="setLevel2('國中',this)">國中</button>
-      <button class="level-btn active" onclick="setLevel2('高中',this)">高中</button>
-      <button class="level-btn" onclick="setLevel2('大學',this)">大學</button>
-      <button class="level-btn" onclick="setLevel2('GRE',this)">GRE</button>
-      <button class="level-btn" onclick="setLevel2('口語',this)">口語</button>
+      <button class="level-btn" onclick="setLevelListen('國小',this)">國小</button>
+      <button class="level-btn" onclick="setLevelListen('國中',this)">國中</button>
+      <button class="level-btn active" onclick="setLevelListen('高中',this)">高中</button>
+      <button class="level-btn" onclick="setLevelListen('大學',this)">大學</button>
+      <button class="level-btn" onclick="setLevelListen('GRE',this)">GRE</button>
+      <button class="level-btn" onclick="setLevelListen('口語',this)">口語</button>
     </div>
 
-    <!-- 6 播放鍵區 -->
     <div class="words-wrap" id="words-wrap2">
       <div class="spinner-wrap"><div class="spinner"></div></div>
       <div id="words-content2">
@@ -449,7 +564,6 @@
       <button class="btn btn-primary" id="gen-btn2" onclick="genWords2()">產生 6 題聽力 →</button>
     </div>
 
-    <!-- 輸入作答區 -->
     <div class="listen-form disabled" id="listen-form">
       <div class="lf-hint">
         聽完上方任一題的讀音後，<b>選一題</b>，把你聽到的<br>
@@ -497,15 +611,25 @@
 
 <script>
 const BASE = "https://spring-art-db47.twlin628.workers.dev";
-let model   = localStorage.getItem("vocab_model") || "gemma4:e4b";
-let level   = "高中";       // 口說頁等級
-let level2  = "高中";       // 聽力頁等級
-let words   = [];          // 口說頁的 6 個單字
-let words2  = [];          // 聽力頁的 6 個單字
-let genBusy = false;
-let quizBusy = false;
-let genBusy2 = false;
-let submitBusy = false;
+let model      = localStorage.getItem("vocab_model") || "gemma4:e4b";
+let ttsRate    = 0.85;
+
+// 各分頁等級（彼此獨立）
+let levelRand   = "高中";   // 隨機出題
+let levelSpeak  = "高中";   // 口說作答
+let levelListen = "高中";   // 聽力輸入
+
+// 忙碌旗標
+let busy       = false;    // 隨機出題
+let lookupBusy = false;    // 單字查詢
+let genBusy    = false;    // 口說出題
+let quizBusy   = false;    // 口說作答
+let genBusy2   = false;    // 聽力出題
+let submitBusy = false;    // 聽力作答
+
+// 各分頁資料
+let words  = [];           // 口說頁的 6 個單字
+let words2 = [];           // 聽力頁的 6 個單字
 
 document.getElementById("model-badge").textContent = model + " ▾";
 document.getElementById("model-select").value = model;
@@ -517,34 +641,107 @@ function switchTab(name, btn) {
   btn.classList.add("active");
   document.getElementById("panel-" + name).classList.add("active");
   if (synth && synth.speaking) synth.cancel();
+  clearTtsBtn();
+  clearPlayBtn();
 }
 
-// ── TTS（聽力頁播放讀音） ──
+// ══════════ TTS（語音合成，全頁共用 synth） ══════════
 const synth = window.speechSynthesis;
+if (synth && synth.onvoiceschanged !== undefined) synth.onvoiceschanged = () => {};
 if (synth) synth.getVoices();
-let activePlayBtn = null;
+let activeTtsBtn  = null;   // 隨機/查詢卡片的朗讀鍵
+let activePlayBtn = null;   // 聽力頁的播放鍵
+
+function pickEnVoice() {
+  const voices = synth.getVoices();
+  return voices.find(v => v.lang.startsWith("en") && v.localService)
+      || voices.find(v => v.lang.startsWith("en"));
+}
+function clearTtsBtn() {
+  if (activeTtsBtn) { activeTtsBtn.classList.remove("speaking"); activeTtsBtn.textContent = "🔊"; activeTtsBtn = null; }
+}
+function clearPlayBtn() {
+  if (activePlayBtn) { activePlayBtn.classList.remove("speaking"); activePlayBtn.textContent = "🔊"; activePlayBtn = null; }
+}
+
+// 隨機/查詢卡片：依語速朗讀任意文字
+function speak(text, btn) {
+  if (!synth) { showToast("⚠ 此瀏覽器不支援語音合成"); return; }
+  if (synth.speaking) {
+    synth.cancel();
+    const prev = activeTtsBtn;
+    clearTtsBtn();
+    if (prev === btn) return;
+  }
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.lang = "en-US"; utt.rate = ttsRate;
+  const v = pickEnVoice(); if (v) utt.voice = v;
+  utt.onstart = () => { activeTtsBtn = btn; btn.classList.add("speaking"); btn.textContent = "■"; };
+  utt.onend = utt.onerror = () => { btn.classList.remove("speaking"); btn.textContent = "🔊"; activeTtsBtn = null; };
+  synth.speak(utt);
+}
+
+// 聽力頁：播放第 i 題讀音
 function playWord(i, btn) {
   if (!synth) { showToast("⚠ 此瀏覽器不支援語音合成"); return; }
   const w = words2[i];
   if (!w) return;
   if (synth.speaking) {
     const prev = activePlayBtn; synth.cancel();
-    if (activePlayBtn) { activePlayBtn.classList.remove("speaking"); activePlayBtn.textContent = "🔊"; }
-    activePlayBtn = null;
+    clearPlayBtn();
     if (prev === btn) return;   // 點同一顆 = 停止
   }
   const utt = new SpeechSynthesisUtterance(w.word);
   utt.lang = "en-US"; utt.rate = 0.9;
-  const voices = synth.getVoices();
-  const enVoice = voices.find(v => v.lang.startsWith("en") && v.localService) || voices.find(v => v.lang.startsWith("en"));
-  if (enVoice) utt.voice = enVoice;
+  const v = pickEnVoice(); if (v) utt.voice = v;
   utt.onstart = () => { activePlayBtn = btn; btn.classList.add("speaking"); btn.textContent = "■"; };
   utt.onend = utt.onerror = () => { btn.classList.remove("speaking"); btn.textContent = "🔊"; activePlayBtn = null; };
   synth.speak(utt);
 }
 
-// ── 等級設定 ──
+// ── 語速（隨機出題頁） ──
+function updateSpeed(val) {
+  ttsRate = parseFloat(val);
+  document.getElementById("speed-val").textContent = ttsRate.toFixed(2) + "×";
+}
+
+// ══════════ 等級設定 ══════════
+// 隨機出題用：分層詞彙庫（含權重，避免全是高頻字）
 const LEVEL_CONFIG = {
+  "國小": { total: "約500字（教育部基本1200字前段）", tiers: [
+    { weight: 0.20, desc: "第一層：最高頻50字，如 go, big, run, sit（刻意壓低出現率）" },
+    { weight: 0.40, desc: "第二層：中頻200字，如 library, weather, careful, surprised, friendly" },
+    { weight: 0.40, desc: "第三層：低頻250字，如 harvest, treasure, polite, curious, proud" },
+  ]},
+  "國中": { total: "約700字新增（累計~1200字，教育部基本1200字完整版）", tiers: [
+    { weight: 0.20, desc: "第一層：最高頻100字，如 important, always, because（刻意壓低）" },
+    { weight: 0.40, desc: "第二層：中頻300字，如 encourage, pollute, consider, population" },
+    { weight: 0.40, desc: "第三層：低頻300字，如 dedicate, qualify, symptom, negotiate" },
+  ]},
+  "高中": { total: "約5800字新增（累計~7000字，大考中心高中英文參考詞彙表）", tiers: [
+    { weight: 0.20, desc: "第一層：常見高中詞，如 analyze, contribute, demonstrate（刻意壓低）" },
+    { weight: 0.40, desc: "第二層：中頻詞，如 ambiguous, eloquent, inevitable, perceive" },
+    { weight: 0.40, desc: "第三層：低頻詞，如 meticulous, provocative, ostracize, lucid" },
+  ]},
+  "大學": { total: "約5000字新增（累計~12000字，CEFR B2-C1 / 學術詞彙AWL）", tiers: [
+    { weight: 0.20, desc: "第一層：常見學術詞，如 hypothesis, analysis, methodology（刻意壓低）" },
+    { weight: 0.40, desc: "第二層：中頻學術詞，如 paradigm, articulate, disseminate, inherent" },
+    { weight: 0.40, desc: "第三層：低頻學術詞，如 epistemology, juxtapose, exacerbate, obfuscate" },
+  ]},
+  "GRE": { total: "約4000字（C1-C2低頻難詞，獨立集）", tiers: [
+    { weight: 0.15, desc: "第一層：GRE常見詞，如 ambivalent, benevolent, candid（刻意壓低）" },
+    { weight: 0.35, desc: "第二層：中頻GRE詞，如 loquacious, perfidious, recalcitrant, sanguine" },
+    { weight: 0.50, desc: "第三層：高難度GRE詞，如 tendentious, adumbrate, nugatory, abstruse" },
+  ]},
+  "口語": { total: "約1500個常用口語表達（片語動詞+俚語，CEFR A2-B2）", tiers: [
+    { weight: 0.20, desc: "第一層：最常見口語，如 hang out, no wonder, by the way（刻意壓低）" },
+    { weight: 0.40, desc: "第二層：中頻口語，如 figure out, blow off steam, on the fence" },
+    { weight: 0.40, desc: "第三層：較少見口語，如 bite the bullet, read between the lines, off the top of my head" },
+  ]},
+};
+
+// 口說/聽力出題用：精簡詞彙庫描述
+const LEVEL_VOCAB = {
   "國小": "約500字（教育部基本1200字前段），如 library, weather, careful, harvest, polite",
   "國中": "約1200字（教育部基本1200字），如 encourage, consider, qualify, symptom, negotiate",
   "高中": "約7000字（大考中心高中英文參考詞彙表），如 ambiguous, inevitable, perceive, meticulous, lucid",
@@ -553,25 +750,183 @@ const LEVEL_CONFIG = {
   "口語": "常用口語表達/片語動詞，如 hang out, figure out, on the fence, bite the bullet",
 };
 
-function setLevel(l, btn) {
-  level = l;
+function pickTier(config) {
+  const r = Math.random(); let acc = 0;
+  for (const tier of config.tiers) { acc += tier.weight; if (r < acc) return tier.desc; }
+  return config.tiers[config.tiers.length - 1].desc;
+}
+
+function setLevelRand(l, btn) {
+  levelRand = l;
+  document.querySelectorAll("#panel-random .level-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+}
+function setLevelSpeak(l, btn) {
+  levelSpeak = l;
   document.querySelectorAll("#panel-speak .level-btn").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
 }
-function setLevel2(l, btn) {
-  level2 = l;
+function setLevelListen(l, btn) {
+  levelListen = l;
   document.querySelectorAll("#panel-listen .level-btn").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
 }
 
-// ── 共用：依等級組出題 prompt ──
+// ══════════ TAB A：隨機出題 ══════════
+function renderCard(w, contentId, tagLabel) {
+  const re     = new RegExp(`\\b(${escapeRe(w.word)}(?:s|ed|ing|er|est|ly)?)\\b`, "gi");
+  const sentEn = w.sentence_en.replace(re, '<span class="kw">$1</span>');
+  const uid    = Date.now();
+
+  document.getElementById(contentId).innerHTML = `
+    <div class="tag">${tagLabel} · ${w.pos || ""}</div>
+    <div class="word-row">
+      <div class="en-word">${w.word}</div>
+      <button class="tts-btn" id="tts-word-${uid}" title="朗讀單字">🔊</button>
+    </div>
+    <div class="phonetic">${w.phonetic || ""}</div>
+    <hr class="divider">
+    <div class="zh-meaning">${w.zh_meaning}</div>
+    <div class="section-label">例句</div>
+    <div class="sentence-block">
+      <div class="sentence-row">
+        <div class="sentence-en">${sentEn}</div>
+        <button class="tts-btn" id="tts-sent-${uid}" title="朗讀例句">🔊</button>
+      </div>
+      <div class="sentence-zh">${w.sentence_zh || ""}</div>
+    </div>
+  `;
+  document.getElementById(`tts-word-${uid}`).addEventListener("click", function() { speak(w.word, this); });
+  document.getElementById(`tts-sent-${uid}`).addEventListener("click", function() { speak(w.sentence_en, this); });
+}
+
+function renderCardPlaceholder(contentId, icon, msg) {
+  document.getElementById(contentId).innerHTML = `
+    <div class="placeholder">
+      <div class="big-icon">${icon}</div>
+      <p>${msg}</p>
+    </div>`;
+}
+
+async function fetchWord() {
+  if (busy) return;
+  busy = true;
+  clearTtsBtn(); if (synth && synth.speaking) synth.cancel();
+
+  const card    = document.getElementById("rand-card");
+  const nextBtn = document.getElementById("next-btn");
+  card.classList.add("loading");
+  nextBtn.disabled = true;
+
+  const cfg      = LEVEL_CONFIG[levelRand];
+  const tierDesc = pickTier(cfg);
+  const seed     = Math.floor(Math.random() * 99991) + 10;
+
+  const prompt =
+`你是英文單字老師。請依照以下條件出一個英文單字並搭配例句。
+
+【等級】${levelRand}（詞彙庫：${cfg.total}）
+【本次抽取區段】${tierDesc}
+【隨機種子】${seed}（請用此數字增加選字隨機性，每次結果應不同）
+
+輸出格式請嚴格遵守以下 JSON，不可輸出任何其他文字或說明：
+{
+  "word": "英文單字",
+  "phonetic": "KK音標",
+  "pos": "詞性（n. / v. / adj. / adv. 等）",
+  "zh_meaning": "中文意思（2-6字）",
+  "sentence_en": "一句實用英文例句（含該單字，難度符合${levelRand}程度）",
+  "sentence_zh": "上句例句的中文翻譯"
+}`;
+
+  try {
+    const w = parseObject(await callAI(prompt));
+    if (!w.word || !w.sentence_en) throw new Error("AI 回應欄位不完整，請再試一次。");
+    renderCard(w, "rand-content", levelRand);
+  } catch (e) {
+    showToast("⚠ " + e.message);
+    renderCardPlaceholder("rand-content", "↺", "出了點問題，請再按一次");
+  } finally {
+    card.classList.remove("loading");
+    nextBtn.disabled = false;
+    busy = false;
+  }
+}
+
+// ══════════ TAB B：單字查詢 ══════════
+function isChinese(str) { return /[一-鿿]/.test(str); }
+
+function detectLang(val) {
+  const hint = document.getElementById("lang-hint");
+  const v = val.trim();
+  if (!v) { hint.innerHTML = "輸入中文或英文單字進行查詢"; return; }
+  if (isChinese(v)) {
+    hint.innerHTML = `偵測到：<span class="detected">中文</span> → 將查詢對應英文單字`;
+  } else {
+    hint.innerHTML = `偵測到：<span class="detected">英文</span> → 將查詢中文意思`;
+  }
+}
+
+async function doLookup() {
+  if (lookupBusy) return;
+  const input = document.getElementById("lookup-input").value.trim();
+  if (!input) { showToast("請先輸入要查詢的單字"); return; }
+
+  lookupBusy = true;
+  clearTtsBtn(); if (synth && synth.speaking) synth.cancel();
+
+  const card = document.getElementById("lookup-card");
+  const btn  = document.getElementById("lookup-btn");
+  card.classList.add("loading");
+  btn.disabled = true;
+
+  const zh2en = isChinese(input);
+
+  const prompt = zh2en
+    ? `你是英文單字老師。使用者輸入了中文「${input}」，請給出最對應的英文單字，並附上實用例句。
+輸出格式請嚴格遵守以下 JSON，不可輸出任何其他文字：
+{
+  "word": "對應英文單字",
+  "phonetic": "KK音標",
+  "pos": "詞性（n. / v. / adj. / adv. 等）",
+  "zh_meaning": "${input}",
+  "sentence_en": "一句實用英文例句（含該單字）",
+  "sentence_zh": "上句例句的中文翻譯"
+}`
+    : `你是英文單字老師。使用者輸入了英文單字「${input}」，請給出中文意思，並附上實用例句。
+輸出格式請嚴格遵守以下 JSON，不可輸出任何其他文字：
+{
+  "word": "${input}",
+  "phonetic": "KK音標",
+  "pos": "詞性（n. / v. / adj. / adv. 等）",
+  "zh_meaning": "中文意思（2-8字）",
+  "sentence_en": "一句實用英文例句（含 ${input}）",
+  "sentence_zh": "上句例句的中文翻譯"
+}`;
+
+  try {
+    const w = parseObject(await callAI(prompt));
+    if (!w.word || !w.sentence_en) throw new Error("AI 回應欄位不完整，請再試一次。");
+    const tagLabel = zh2en ? `中→英` : `英→中`;
+    renderCard(w, "lookup-content", tagLabel);
+  } catch (e) {
+    showToast("⚠ " + e.message);
+    renderCardPlaceholder("lookup-content", "↺", "出了點問題，請再試一次");
+  } finally {
+    card.classList.remove("loading");
+    btn.disabled = false;
+    lookupBusy = false;
+  }
+}
+
+// ══════════ 共用：依等級組出題 prompt（口說/聽力） ══════════
 function buildGenPrompt(lv) {
   const seed = Math.floor(Math.random() * 99991) + 10;
   return (
 `你是英文單字老師。請依等級產生「6 個不同」的英文單字，難度需符合該等級，並涵蓋不同難度（避免全是最高頻字）。
 
 【等級】${lv}
-【詞彙庫參考】${LEVEL_CONFIG[lv]}
+【詞彙庫參考】${LEVEL_VOCAB[lv]}
 【隨機種子】${seed}（用此數字增加選字隨機性，每次結果應不同，6 個字彼此不可重複）
 
 請嚴格只輸出以下 JSON 陣列，不可有任何其他文字或說明：
@@ -581,7 +936,7 @@ function buildGenPrompt(lv) {
 陣列必須剛好 6 個元素。`);
 }
 
-// ── 產生 6 個單字 ──
+// ══════════ TAB C：口說作答 ══════════
 async function genWords() {
   if (genBusy) return;
   genBusy = true;
@@ -593,7 +948,7 @@ async function genWords() {
   lockMic("AI 出題中…");
 
   try {
-    const raw = await callAI(buildGenPrompt(level));
+    const raw = await callAI(buildGenPrompt(levelSpeak));
     const arr = parseArray(raw);
     if (!Array.isArray(arr) || arr.length === 0) throw new Error("AI 回應格式錯誤，請再試一次。");
     words = arr.slice(0, 6).filter(w => w && w.word);
@@ -602,7 +957,7 @@ async function genWords() {
     unlockMic();
   } catch (e) {
     showToast("⚠ " + e.message);
-    renderPlaceholder("↺", "出了點問題，請再按一次");
+    renderSpeakPlaceholder("↺", "出了點問題，請再按一次");
     words = [];
     lockMic("先產生單字才能作答");
   } finally {
@@ -625,12 +980,11 @@ function renderWords() {
   document.getElementById("words-content").innerHTML = `<div class="word-grid">${html}</div>`;
 }
 
-function renderPlaceholder(icon, msg) {
+function renderSpeakPlaceholder(icon, msg) {
   document.getElementById("words-content").innerHTML =
     `<div class="placeholder"><div class="big-icon">${icon}</div><p>${msg}</p></div>`;
 }
 
-// ── 麥克風鎖定狀態 ──
 function lockMic(msg) {
   document.getElementById("mic-section").classList.add("disabled");
   document.getElementById("mic-btn").disabled = true;
@@ -643,7 +997,7 @@ function unlockMic() {
   hideResult();
 }
 
-// ── STT：辨識一段語音（回傳 Promise<string>） ──
+// STT：辨識一段語音（回傳 Promise<string>）
 function recognizeOnce(lang) {
   return new Promise((resolve, reject) => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -668,7 +1022,7 @@ function recognizeOnce(lang) {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-// ── 作答流程：先英文 → 再中文 → 送 AI 判定 ──
+// 作答流程：先英文 → 再中文 → 送 AI 判定
 async function startQuiz() {
   if (quizBusy || words.length === 0) return;
   quizBusy = true;
@@ -680,17 +1034,14 @@ async function startQuiz() {
 
   let enText = "", zhText = "";
   try {
-    // 第 1 段：英文
     micBtn.classList.add("recording");
     setStatus("第 1 / 2 段", "🎤 請念出「英文單字」…");
     enText = await recognizeOnce("en-US");
     micBtn.classList.remove("recording");
 
-    // 過場
     setStatus("準備中", "✅ 已收到英文，準備念中文…");
     await sleep(800);
 
-    // 第 2 段：中文
     micBtn.classList.add("recording");
     setStatus("第 2 / 2 段", "🎤 請念出「中文翻譯」…");
     zhText = await recognizeOnce("zh-TW");
@@ -698,7 +1049,6 @@ async function startQuiz() {
 
     if (!enText && !zhText) throw new Error("沒有偵測到語音，請再試一次");
 
-    // 送 AI 判定
     setStatus("判定中", "🤖 AI 判定中…");
     const r = await judge(enText, zhText);
     renderResult(r, enText, zhText);
@@ -718,7 +1068,6 @@ function setStatus(step, msg) {
     (step ? `<span class="step">${step}</span>` : "") + msg;
 }
 
-// ── AI 判定 ──
 async function judge(enText, zhText) {
   const list = words.map((w, i) => `${i + 1}. ${w.word}（${w.zh_meaning || ""}）`).join("\n");
   const prompt =
@@ -752,7 +1101,7 @@ ${list}
   return parseObject(raw);
 }
 
-// ── 細項標記（英文 / 中文 各自對錯） ──
+// 細項標記（英文 / 中文 各自對錯）
 function detailChips(r, matchedIdx) {
   // 命中時兩者必為對；否則用 AI 回傳的 en_ok / zh_ok，缺值時保守視為錯
   const enOk = matchedIdx >= 0 ? true : !!(r && r.en_ok);
@@ -807,9 +1156,7 @@ function resetQuiz() {
   setStatus("", "選一個單字，按麥克風開始作答");
 }
 
-// ══════════ 聽力頁（PANEL B） ══════════
-
-// ── 產生 6 題聽力 ──
+// ══════════ TAB D：聽力輸入 ══════════
 async function genWords2() {
   if (genBusy2) return;
   genBusy2 = true;
@@ -822,7 +1169,7 @@ async function genWords2() {
   lockListen("AI 出題中…");
 
   try {
-    const raw = await callAI(buildGenPrompt(level2));
+    const raw = await callAI(buildGenPrompt(levelListen));
     const arr = parseArray(raw);
     if (!Array.isArray(arr) || arr.length === 0) throw new Error("AI 回應格式錯誤，請再試一次。");
     words2 = arr.slice(0, 6).filter(w => w && w.word);
@@ -870,7 +1217,6 @@ function unlockListen() {
   hideResult2();
 }
 
-// ── 送出作答 → AI 判定 ──
 async function submitAnswer() {
   if (submitBusy || words2.length === 0) return;
   const en = document.getElementById("en-input").value.trim();
@@ -971,7 +1317,7 @@ function clearMatch2() {
 }
 function hideResult2() { document.getElementById("result-box2").classList.remove("show"); }
 
-// ── 共用 AI 呼叫 ──
+// ══════════ 共用 AI 呼叫與解析 ══════════
 async function callAI(prompt) {
   const res = await fetch(BASE + "/api/chat/completions", {
     method: "POST",
@@ -1010,6 +1356,9 @@ function showToast(msg) {
   t.textContent = msg; t.classList.add("show");
   setTimeout(() => t.classList.remove("show"), 3500);
 }
+
+// ── Util ──
+function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 // ── 啟動：偵測瀏覽器支援 ──
 (function init() {
