@@ -427,7 +427,7 @@
 
 <header>
   <h1>✦ LexSuite</h1>
-  <span class="ver">v2.0.0</span>
+  <span class="ver">v2.0.1</span>
   <span class="model-badge" id="model-badge" onclick="openModal()">gemma4:e4b ▾</span>
 </header>
 
@@ -453,9 +453,9 @@
     </div>
     <div class="speed-row">
       <label>🔊 語速</label>
-      <input type="range" id="speed-slider" min="0.5" max="1.5" step="0.05" value="0.85"
+      <input type="range" class="speed-slider" min="0.5" max="1.5" step="0.05" value="0.85"
              oninput="updateSpeed(this.value)">
-      <span class="speed-val" id="speed-val">0.85×</span>
+      <span class="speed-val">0.85×</span>
     </div>
     <div class="word-card" id="rand-card">
       <div class="spinner-wrap"><div class="spinner"></div></div>
@@ -480,6 +480,12 @@
              oninput="detectLang(this.value)"
              onkeydown="if(event.key==='Enter') doLookup()">
       <button class="btn-lookup" id="lookup-btn" onclick="doLookup()">查詢</button>
+    </div>
+    <div class="speed-row">
+      <label>🔊 語速</label>
+      <input type="range" class="speed-slider" min="0.5" max="1.5" step="0.05" value="0.85"
+             oninput="updateSpeed(this.value)">
+      <span class="speed-val">0.85×</span>
     </div>
     <div class="word-card" id="lookup-card">
       <div class="spinner-wrap"><div class="spinner"></div></div>
@@ -548,6 +554,13 @@
       <button class="level-btn" onclick="setLevelListen('大學',this)">大學</button>
       <button class="level-btn" onclick="setLevelListen('GRE',this)">GRE</button>
       <button class="level-btn" onclick="setLevelListen('口語',this)">口語</button>
+    </div>
+
+    <div class="speed-row">
+      <label>🔊 語速</label>
+      <input type="range" class="speed-slider" min="0.5" max="1.5" step="0.05" value="0.85"
+             oninput="updateSpeed(this.value)">
+      <span class="speed-val">0.85×</span>
     </div>
 
     <div class="words-wrap" id="words-wrap2">
@@ -630,6 +643,7 @@ let submitBusy = false;    // 聽力作答
 // 各分頁資料
 let words  = [];           // 口說頁的 6 個單字
 let words2 = [];           // 聽力頁的 6 個單字
+let uidSeq = 0;            // 卡片元素唯一編號（單調遞增，避免同毫秒碰撞）
 
 document.getElementById("model-badge").textContent = model + " ▾";
 document.getElementById("model-select").value = model;
@@ -692,17 +706,19 @@ function playWord(i, btn) {
     if (prev === btn) return;   // 點同一顆 = 停止
   }
   const utt = new SpeechSynthesisUtterance(w.word);
-  utt.lang = "en-US"; utt.rate = 0.9;
+  utt.lang = "en-US"; utt.rate = ttsRate;
   const v = pickEnVoice(); if (v) utt.voice = v;
   utt.onstart = () => { activePlayBtn = btn; btn.classList.add("speaking"); btn.textContent = "■"; };
   utt.onend = utt.onerror = () => { btn.classList.remove("speaking"); btn.textContent = "🔊"; activePlayBtn = null; };
   synth.speak(utt);
 }
 
-// ── 語速（隨機出題頁） ──
+// ── 語速（三頁共用，調整後統一同步） ──
 function updateSpeed(val) {
   ttsRate = parseFloat(val);
-  document.getElementById("speed-val").textContent = ttsRate.toFixed(2) + "×";
+  const label = ttsRate.toFixed(2) + "×";
+  document.querySelectorAll(".speed-slider").forEach(s => { s.value = ttsRate; });
+  document.querySelectorAll(".speed-val").forEach(v => { v.textContent = label; });
 }
 
 // ══════════ 等級設定 ══════════
@@ -775,25 +791,25 @@ function setLevelListen(l, btn) {
 // ══════════ TAB A：隨機出題 ══════════
 function renderCard(w, contentId, tagLabel) {
   const re     = new RegExp(`\\b(${escapeRe(w.word)}(?:s|ed|ing|er|est|ly)?)\\b`, "gi");
-  const sentEn = w.sentence_en.replace(re, '<span class="kw">$1</span>');
-  const uid    = Date.now();
+  const sentEn = escapeHtml(w.sentence_en).replace(re, '<span class="kw">$1</span>');
+  const uid    = ++uidSeq;
 
   document.getElementById(contentId).innerHTML = `
-    <div class="tag">${tagLabel} · ${w.pos || ""}</div>
+    <div class="tag">${escapeHtml(tagLabel)} · ${escapeHtml(w.pos || "")}</div>
     <div class="word-row">
-      <div class="en-word">${w.word}</div>
+      <div class="en-word">${escapeHtml(w.word)}</div>
       <button class="tts-btn" id="tts-word-${uid}" title="朗讀單字">🔊</button>
     </div>
-    <div class="phonetic">${w.phonetic || ""}</div>
+    <div class="phonetic">${escapeHtml(w.phonetic || "")}</div>
     <hr class="divider">
-    <div class="zh-meaning">${w.zh_meaning}</div>
+    <div class="zh-meaning">${escapeHtml(w.zh_meaning)}</div>
     <div class="section-label">例句</div>
     <div class="sentence-block">
       <div class="sentence-row">
         <div class="sentence-en">${sentEn}</div>
         <button class="tts-btn" id="tts-sent-${uid}" title="朗讀例句">🔊</button>
       </div>
-      <div class="sentence-zh">${w.sentence_zh || ""}</div>
+      <div class="sentence-zh">${escapeHtml(w.sentence_zh || "")}</div>
     </div>
   `;
   document.getElementById(`tts-word-${uid}`).addEventListener("click", function() { speak(w.word, this); });
@@ -972,10 +988,10 @@ function renderWords() {
     <div class="wcard" id="wcard-${i}">
       <div class="wtop">
         <span class="num">${i + 1}</span>
-        <span class="en">${w.word}</span>
+        <span class="en">${escapeHtml(w.word)}</span>
         <span class="check">✓</span>
       </div>
-      <div class="phon">${w.phonetic || ""} <span class="pos">${w.pos || ""}</span></div>
+      <div class="phon">${escapeHtml(w.phonetic || "")} <span class="pos">${escapeHtml(w.pos || "")}</span></div>
     </div>`).join("");
   document.getElementById("words-content").innerHTML = `<div class="word-grid">${html}</div>`;
 }
@@ -1115,7 +1131,7 @@ function detailChips(r, matchedIdx) {
 function renderResult(r, enText, zhText) {
   clearMatch();
   const box = document.getElementById("result-box");
-  const heard = `<div class="heard"><span>聽到的英文：</span>${enText || "(無)"}<br><span>聽到的中文：</span>${zhText || "(無)"}</div>`;
+  const heard = `<div class="heard"><span>聽到的英文：</span>${escapeHtml(enText) || "(無)"}<br><span>聽到的中文：</span>${escapeHtml(zhText) || "(無)"}</div>`;
 
   let matchedIdx = -1;
   if (r && r.matched && String(r.matched).toLowerCase() !== "null") {
@@ -1131,13 +1147,13 @@ function renderResult(r, enText, zhText) {
       if (i === matchedIdx) c.classList.add("matched"); else c.classList.add("dimmed");
     });
     box.className = "result-box ok show";
-    box.innerHTML = `<div class="rtitle">✓ 判定為：${w.word}　${w.zh_meaning || ""}</div>
-      ${r.reason ? `<div class="reason">${r.reason}</div>` : ""}${chips}${heard}`;
+    box.innerHTML = `<div class="rtitle">✓ 判定為：${escapeHtml(w.word)}　${escapeHtml(w.zh_meaning || "")}</div>
+      ${r.reason ? `<div class="reason">${escapeHtml(r.reason)}</div>` : ""}${chips}${heard}`;
     setStatus("", "判定完成");
   } else {
     box.className = "result-box miss show";
     box.innerHTML = `<div class="rtitle">✗ 答錯</div>
-      ${r && r.reason ? `<div class="reason">${r.reason}</div>` : ""}${chips}${heard}`;
+      ${r && r.reason ? `<div class="reason">${escapeHtml(r.reason)}</div>` : ""}${chips}${heard}`;
     setStatus("", "判定完成");
   }
 }
@@ -1279,7 +1295,7 @@ ${list}
 function renderResult2(r, en, zh) {
   clearMatch2();
   const box = document.getElementById("result-box2");
-  const typed = `<div class="heard"><span>你輸入的英文：</span>${en || "(無)"}<br><span>你輸入的中文：</span>${zh || "(無)"}</div>`;
+  const typed = `<div class="heard"><span>你輸入的英文：</span>${escapeHtml(en) || "(無)"}<br><span>你輸入的中文：</span>${escapeHtml(zh) || "(無)"}</div>`;
 
   let idx = -1;
   if (r && r.matched && String(r.matched).toLowerCase() !== "null") {
@@ -1297,12 +1313,12 @@ function renderResult2(r, en, zh) {
     const rev = document.getElementById("reveal-" + idx);
     if (rev) rev.textContent = `${w.word}　${w.zh_meaning || ""}`;
     box.className = "result-box ok show";
-    box.innerHTML = `<div class="rtitle">✓ 判定為第 ${idx + 1} 題：${w.word}　${w.zh_meaning || ""}</div>
-      ${r.reason ? `<div class="reason">${r.reason}</div>` : ""}${chips}${typed}`;
+    box.innerHTML = `<div class="rtitle">✓ 判定為第 ${idx + 1} 題：${escapeHtml(w.word)}　${escapeHtml(w.zh_meaning || "")}</div>
+      ${r.reason ? `<div class="reason">${escapeHtml(r.reason)}</div>` : ""}${chips}${typed}`;
   } else {
     box.className = "result-box miss show";
     box.innerHTML = `<div class="rtitle">✗ 答錯</div>
-      ${r && r.reason ? `<div class="reason">${r.reason}</div>` : ""}${chips}${typed}`;
+      ${r && r.reason ? `<div class="reason">${escapeHtml(r.reason)}</div>` : ""}${chips}${typed}`;
   }
   document.getElementById("listen-status").textContent = "判定完成";
 }
@@ -1359,6 +1375,10 @@ function showToast(msg) {
 
 // ── Util ──
 function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
 
 // ── 啟動：偵測瀏覽器支援 ──
 (function init() {
