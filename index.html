@@ -427,7 +427,7 @@
 
 <header>
   <h1>✦ LexSuite</h1>
-  <span class="ver">v2.0.2</span>
+  <span class="ver">v2.0.3</span>
   <span class="model-badge" id="model-badge" onclick="openModal()">gemma4:e4b ▾</span>
 </header>
 
@@ -637,6 +637,7 @@ let busy       = false;    // 隨機出題
 let lookupBusy = false;    // 單字查詢
 let genBusy    = false;    // 口說出題
 let quizBusy   = false;    // 口說作答
+let quizCancelled = false; // 口說作答流程被中斷（切頁等）
 let genBusy2   = false;    // 聽力出題
 let submitBusy = false;    // 聽力作答
 
@@ -655,6 +656,8 @@ function switchTab(name, btn) {
   btn.classList.add("active");
   document.getElementById("panel-" + name).classList.add("active");
   if (synth && synth.speaking) synth.cancel();
+  quizCancelled = true;   // 標記口說流程中斷
+  stopRecognition();      // 切頁時關閉進行中的麥克風辨識
   clearTtsBtn();
   clearPlayBtn();
 }
@@ -1013,6 +1016,18 @@ function unlockMic() {
   hideResult();
 }
 
+// 進行中的語音辨識物件（供中斷時關閉麥克風）
+let activeRec = null;
+
+// 主動中止進行中的辨識並釋放麥克風（切頁/重作答時呼叫）
+function stopRecognition() {
+  if (activeRec) {
+    activeRec._aborted = true;
+    try { activeRec.abort(); } catch (e) {}
+    activeRec = null;
+  }
+}
+
 // STT：辨識一段語音（回傳 Promise<string>）
 function recognizeOnce(lang) {
   return new Promise((resolve, reject) => {
@@ -1031,8 +1046,13 @@ function recognizeOnce(lang) {
       else if (e.error === "audio-capture") fatal = "找不到麥克風裝置";
       else fatal = "辨識錯誤：" + e.error;
     };
-    rec.onend = () => { fatal ? reject(new Error(fatal)) : resolve(got.trim()); };
-    try { rec.start(); } catch (err) { reject(new Error("無法啟動麥克風：" + err.message)); }
+    rec.onend = () => {
+      if (activeRec === rec) activeRec = null;   // onend 後釋放參考
+      if (rec._aborted) { reject(new Error("__aborted__")); return; }  // 被中止：靜默結束
+      fatal ? reject(new Error(fatal)) : resolve(got.trim());
+    };
+    activeRec = rec;
+    try { rec.start(); } catch (err) { activeRec = null; reject(new Error("無法啟動麥克風：" + err.message)); }
   });
 }
 
@@ -1042,6 +1062,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 async function startQuiz() {
   if (quizBusy || words.length === 0) return;
   quizBusy = true;
+  quizCancelled = false;
   hideResult();
   clearMatch();
 
@@ -1057,6 +1078,7 @@ async function startQuiz() {
 
     setStatus("準備中", "✅ 已收到英文，準備念中文…");
     await sleep(800);
+    if (quizCancelled) throw new Error("__aborted__");   // sleep 期間被切頁，勿啟動第二段麥克風
 
     micBtn.classList.add("recording");
     setStatus("第 2 / 2 段", "🎤 請念出「中文翻譯」…");
@@ -1070,6 +1092,10 @@ async function startQuiz() {
     renderResult(r, enText, zhText);
   } catch (e) {
     micBtn.classList.remove("recording");
+    if (e.message === "__aborted__") {     // 切頁等中止：靜默結束，不誤判也不續錄
+      setStatus("", "選一個單字，按麥克風開始作答");
+      return;
+    }
     showToast("⚠ " + e.message);
     setStatus("", "可重新作答");
   } finally {
