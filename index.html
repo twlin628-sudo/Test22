@@ -427,7 +427,7 @@
 
 <header>
   <h1>✦ LexSuite</h1>
-  <span class="ver">v2.0.1</span>
+  <span class="ver">v2.0.2</span>
   <span class="model-badge" id="model-badge" onclick="openModal()">gemma4:e4b ▾</span>
 </header>
 
@@ -1138,6 +1138,8 @@ function renderResult(r, enText, zhText) {
     matchedIdx = words.findIndex(w => w.word.toLowerCase() === String(r.matched).toLowerCase());
     if (matchedIdx < 0 && r.index >= 1 && r.index <= words.length) matchedIdx = r.index - 1;
   }
+  // 防小模型矛盾回應：英文或中文被明確判為不符時，即使回了 matched 也不算命中
+  if (r && (r.en_ok === false || r.zh_ok === false)) matchedIdx = -1;
   const chips = detailChips(r, matchedIdx);
 
   if (matchedIdx >= 0) {
@@ -1302,6 +1304,8 @@ function renderResult2(r, en, zh) {
     idx = words2.findIndex(w => w.word.toLowerCase() === String(r.matched).toLowerCase());
     if (idx < 0 && r.index >= 1 && r.index <= words2.length) idx = r.index - 1;
   }
+  // 防小模型矛盾回應：英文或中文被明確判為不符時，即使回了 matched 也不算命中
+  if (r && (r.en_ok === false || r.zh_ok === false)) idx = -1;
   const chips = detailChips(r, idx);
 
   if (idx >= 0) {
