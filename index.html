@@ -245,6 +245,16 @@
   }
   .result-box .heard span { color: var(--ink3); }
   .result-box .reason { color: var(--ink2); margin-top: 8px; font-size: .85rem; }
+  .result-box .detail {
+    display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;
+  }
+  .result-box .chip {
+    font-family: "SF Mono","Fira Mono",monospace; font-size: .76rem;
+    border-radius: 8px; padding: 4px 10px; border: 1px solid transparent;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .result-box .chip.pass { background: var(--ok-light); color: var(--ok); border-color: #bbf7d0; }
+  .result-box .chip.fail { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
 
   .retry-bar { margin-top: 14px; display: none; }
   .retry-bar.show { display: block; }
@@ -712,23 +722,45 @@ function setStatus(step, msg) {
 async function judge(enText, zhText) {
   const list = words.map((w, i) => `${i + 1}. ${w.word}（${w.zh_meaning || ""}）`).join("\n");
   const prompt =
-`使用者正在做英文單字口說測驗。以下是 6 個候選單字：
+`使用者正在做英文單字口說測驗。規則：使用者會先念「英文單字」、再念「該單字的中文翻譯」，必須兩者都正確才算答對。
+
+以下是 6 個候選單字：
 ${list}
 
-使用者透過語音辨識念出來的內容（辨識可能有誤差/音譯，請寬鬆比對發音與語意）：
+使用者透過語音辨識念出來的內容（辨識可能有誤差/音譯，請寬鬆比對發音）：
 - 英文部分辨識結果：「${enText || "(無)"}」
 - 中文部分辨識結果：「${zhText || "(無)"}」
 
-請判斷使用者最可能想念的是上面哪一個候選單字。若發音與語意都明顯對不上任何一個，matched 回傳 null。
+請依下列步驟判定：
+1. 先用「英文部分」鎖定使用者想念的是上面哪一個候選單字（發音相近即可）。
+2. 再檢查「中文部分」是否與『該單字』的中文意思相符——只要詞意相同或為近義即可，用字不必完全一樣。判斷尺度參考下列範例：
+   ・相符（算對）：「模稜兩可的」↔「含糊的／不明確的」、「鼓勵」↔「激勵／勉勵」、「不可避免的」↔「無可避免／必然的」、「察覺」↔「感知／注意到」、「謹慎的」↔「小心的／細心的」、「巧妙的」↔「靈巧的／高明的」（同義或近義、同詞性即可）
+   ・不相符（算錯）：詞意明顯不同（如「鼓勵」念成「考慮」）、反義（如「清楚的」念成「模糊的」）、只對到字面其中一部分但整體意思不對、或念成完全無關的詞。
+3. 只有當英文對應到某個候選字、且中文與『該字』詞意相符時，才算命中（matched 回傳該字、index 回傳其編號）。
+4. 若英文對得上某字、但中文與『該字』詞意不符（念成別的意思或念錯），視為答錯：matched 回傳 null、index 回傳 0，並在 reason 說明「英文正確，但中文翻譯不符」。
+5. 若英文對不上任何候選字，matched 回傳 null、index 回傳 0。
 
 請嚴格只輸出以下 JSON，不可有其他文字：
 {
   "matched": "命中的英文單字，或 null",
   "index": 命中的編號(1-6)，無則 0,
-  "reason": "簡短判定理由（繁體中文，一句）"
+  "en_ok": true 或 false（英文是否對應到某個候選字）,
+  "zh_ok": true 或 false（中文是否與該字詞意相符；英文對不上時一律 false）,
+  "reason": "簡短判定理由（繁體中文，一句；若因中文不符而答錯需點明）"
 }`;
   const raw = await callAI(prompt);
   return parseObject(raw);
+}
+
+// ── 細項標記（英文 / 中文 各自對錯） ──
+function detailChips(r, matchedIdx) {
+  // 命中時兩者必為對；否則用 AI 回傳的 en_ok / zh_ok，缺值時保守視為錯
+  const enOk = matchedIdx >= 0 ? true : !!(r && r.en_ok);
+  const zhOk = matchedIdx >= 0 ? true : !!(r && r.zh_ok);
+  return `<div class="detail">
+    <span class="chip ${enOk ? "pass" : "fail"}">英文 ${enOk ? "✓" : "✗"}</span>
+    <span class="chip ${zhOk ? "pass" : "fail"}">中文 ${zhOk ? "✓" : "✗"}</span>
+  </div>`;
 }
 
 function renderResult(r, enText, zhText) {
@@ -741,6 +773,7 @@ function renderResult(r, enText, zhText) {
     matchedIdx = words.findIndex(w => w.word.toLowerCase() === String(r.matched).toLowerCase());
     if (matchedIdx < 0 && r.index >= 1 && r.index <= words.length) matchedIdx = r.index - 1;
   }
+  const chips = detailChips(r, matchedIdx);
 
   if (matchedIdx >= 0) {
     const w = words[matchedIdx];
@@ -750,12 +783,12 @@ function renderResult(r, enText, zhText) {
     });
     box.className = "result-box ok show";
     box.innerHTML = `<div class="rtitle">✓ 判定為：${w.word}　${w.zh_meaning || ""}</div>
-      ${r.reason ? `<div class="reason">${r.reason}</div>` : ""}${heard}`;
+      ${r.reason ? `<div class="reason">${r.reason}</div>` : ""}${chips}${heard}`;
     setStatus("", "判定完成");
   } else {
     box.className = "result-box miss show";
-    box.innerHTML = `<div class="rtitle">✗ 不在這 6 個單字中</div>
-      ${r && r.reason ? `<div class="reason">${r.reason}</div>` : ""}${heard}`;
+    box.innerHTML = `<div class="rtitle">✗ 答錯</div>
+      ${r && r.reason ? `<div class="reason">${r.reason}</div>` : ""}${chips}${heard}`;
     setStatus("", "判定完成");
   }
 }
@@ -867,20 +900,31 @@ async function submitAnswer() {
 async function judge2(en, zh) {
   const list = words2.map((w, i) => `${i + 1}. ${w.word}（${w.zh_meaning || ""}）`).join("\n");
   const prompt =
-`使用者正在做英文單字聽力測驗，剛剛聽了 6 段讀音。以下是 6 個候選單字：
+`使用者正在做英文單字聽力測驗，剛剛聽了 6 段讀音。規則：英文單字與中文翻譯必須兩者都正確才算答對。
+
+以下是 6 個候選單字：
 ${list}
 
-使用者選了其中一題並輸入答案（容許拼字小誤差與近義中文翻譯）：
+使用者選了其中一題並輸入答案：
 - 輸入的英文單字：「${en || "(無)"}」
 - 輸入的中文翻譯：「${zh || "(無)"}」
 
-請判斷使用者的答案對應的是上面哪一個候選單字。若明顯都對不上任何一個，matched 回傳 null。
+請依下列步驟判定：
+1. 先用「輸入的英文單字」鎖定對應的是上面哪一個候選單字（容許拼字小誤差）。
+2. 再檢查「輸入的中文翻譯」是否與『該單字』的中文意思相符——只要詞意相同或為近義即可，用字不必完全一樣。判斷尺度參考下列範例：
+   ・相符（算對）：「模稜兩可的」↔「含糊的／不明確的」、「鼓勵」↔「激勵／勉勵」、「不可避免的」↔「無可避免／必然的」、「察覺」↔「感知／注意到」、「謹慎的」↔「小心的／細心的」、「巧妙的」↔「靈巧的／高明的」（同義或近義、同詞性即可）
+   ・不相符（算錯）：詞意明顯不同（如「鼓勵」寫成「考慮」）、反義（如「清楚的」寫成「模糊的」）、只對到字面其中一部分但整體意思不對、或寫成完全無關的詞。
+3. 只有當英文對應到某個候選字、且中文與『該字』詞意相符時，才算命中（matched 回傳該字、index 回傳其編號）。
+4. 若英文對得上某字、但中文與『該字』詞意不符，視為答錯：matched 回傳 null、index 回傳 0，並在 reason 說明「英文正確，但中文翻譯不符」。
+5. 若英文對不上任何候選字，matched 回傳 null、index 回傳 0。
 
 請嚴格只輸出以下 JSON，不可有其他文字：
 {
   "matched": "命中的英文單字，或 null",
   "index": 命中的編號(1-6)，無則 0,
-  "reason": "簡短判定理由（繁體中文，一句）"
+  "en_ok": true 或 false（英文是否對應到某個候選字）,
+  "zh_ok": true 或 false（中文是否與該字詞意相符；英文對不上時一律 false）,
+  "reason": "簡短判定理由（繁體中文，一句；若因中文不符而答錯需點明）"
 }`;
   const raw = await callAI(prompt);
   return parseObject(raw);
@@ -896,6 +940,7 @@ function renderResult2(r, en, zh) {
     idx = words2.findIndex(w => w.word.toLowerCase() === String(r.matched).toLowerCase());
     if (idx < 0 && r.index >= 1 && r.index <= words2.length) idx = r.index - 1;
   }
+  const chips = detailChips(r, idx);
 
   if (idx >= 0) {
     const w = words2[idx];
@@ -907,11 +952,11 @@ function renderResult2(r, en, zh) {
     if (rev) rev.textContent = `${w.word}　${w.zh_meaning || ""}`;
     box.className = "result-box ok show";
     box.innerHTML = `<div class="rtitle">✓ 判定為第 ${idx + 1} 題：${w.word}　${w.zh_meaning || ""}</div>
-      ${r.reason ? `<div class="reason">${r.reason}</div>` : ""}${typed}`;
+      ${r.reason ? `<div class="reason">${r.reason}</div>` : ""}${chips}${typed}`;
   } else {
     box.className = "result-box miss show";
-    box.innerHTML = `<div class="rtitle">✗ 不在這 6 個單字中</div>
-      ${r && r.reason ? `<div class="reason">${r.reason}</div>` : ""}${typed}`;
+    box.innerHTML = `<div class="rtitle">✗ 答錯</div>
+      ${r && r.reason ? `<div class="reason">${r.reason}</div>` : ""}${chips}${typed}`;
   }
   document.getElementById("listen-status").textContent = "判定完成";
 }
